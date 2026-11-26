@@ -1,4 +1,3 @@
-
 """Configuração central do projeto: caminhos, esquema dos dados e limiares de qualidade."""
 
 from pathlib import Path
