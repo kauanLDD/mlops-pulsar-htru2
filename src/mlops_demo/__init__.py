@@ -1,3 +1,4 @@
-"""Projeto de demonstração de CI/CD/CT para ML."""
+"""Triagem de candidatos a pulsar (HTRU2) com CI/CD/CT para ML."""
 
-__version__ = "0.1.0"
+# fonte única da versão: o pyproject.toml lê daqui e a API devolve em /health e /predict
+__version__ = "1.0.0"
