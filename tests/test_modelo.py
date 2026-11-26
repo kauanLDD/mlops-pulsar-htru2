@@ -18,36 +18,42 @@ def test_campeao_versionado_foi_certificado_pelo_portao():
     """O metrics.json do campeão registra o que o portão mediu ao aprová-lo e cumpre o contrato."""
     with open(config.METRICAS_CAMPEAO, encoding="utf-8") as arquivo:
         declaradas = json.load(arquivo)
-    assert declaradas["recall_maligno"] >= config.RECALL_MINIMO, declaradas
-    assert declaradas["precisao_maligna"] >= config.PRECISAO_MINIMA, declaradas
+    assert declaradas["recall_pulsar"] >= config.RECALL_MINIMO, declaradas
+    assert declaradas["precisao_pulsar"] >= config.PRECISAO_MINIMA, declaradas
 
 
 def test_campeao_versionado_nao_colapsou_na_base_de_referencia(campeao, base_holdout):
     """Sanidade: o artefato carrega, prevê e não perdeu o básico no holdout fixo.
 
-    O contrato de 0,90 é medido pelo portão, no conjunto de avaliação da época da promoção.
+    O contrato (recall 0,85 e precisão 0,80) é medido pelo portão, no conjunto de avaliação
+    da época da promoção.
     Depois que o modelo se adapta a dados novos, o holdout antigo pode cair um pouco.
     Por isso o piso aqui é menor.
     """
     metricas = avaliar(campeao, base_holdout)
-    assert metricas["recall_maligno"] >= config.PISO_SANIDADE, metricas
-    assert metricas["precisao_maligna"] >= config.PISO_SANIDADE, metricas
+    assert metricas["recall_pulsar"] >= config.PISO_SANIDADE, metricas
+    assert metricas["precisao_pulsar"] >= config.PISO_SANIDADE, metricas
 
 
 def test_treino_com_o_codigo_e_params_atuais_cumpre_o_contrato(modelo_atual, base_holdout):
     """Se alguém mexer no código ou no params.yaml, o CI treina de novo e confere os limiares."""
     metricas = avaliar(modelo_atual, base_holdout)
-    assert metricas["recall_maligno"] >= config.RECALL_MINIMO, metricas
-    assert metricas["precisao_maligna"] >= config.PRECISAO_MINIMA, metricas
+    assert metricas["recall_pulsar"] >= config.RECALL_MINIMO, metricas
+    assert metricas["precisao_pulsar"] >= config.PRECISAO_MINIMA, metricas
 
 
 def test_modelo_supera_o_baseline_ingenuo(modelo_atual, base_treino, base_holdout):
+    """O baseline chuta sempre ruído: acerta ~91% (acurácia) e não encontra nenhum pulsar.
+
+    Por isso a comparação usa o recall do pulsar e não a acurácia.
+    """
     X_tr, y_tr = separar_xy(base_treino)
     X_te, y_te = separar_xy(base_holdout)
     baseline = DummyClassifier(strategy="most_frequent").fit(X_tr, y_tr)
-    nota_baseline = calcular_metricas(y_te, baseline.predict(X_te))["acuracia"]
-    nota_modelo = calcular_metricas(y_te, modelo_atual.predict(X_te))["acuracia"]
-    assert nota_modelo > nota_baseline + 0.1
+    nota_baseline = calcular_metricas(y_te, baseline.predict(X_te))["recall_pulsar"]
+    nota_modelo = calcular_metricas(y_te, modelo_atual.predict(X_te))["recall_pulsar"]
+    assert nota_baseline == 0.0
+    assert nota_modelo > nota_baseline + 0.5
 
 
 def test_treino_e_deterministico(base_treino, params, xy_holdout):
@@ -62,6 +68,8 @@ def test_modelo_consegue_memorizar_um_lote_pequeno(base_treino, params):
     pequeno = base_treino.sample(40, random_state=0)
     modelo = treinar(pequeno, params)
     X, y = separar_xy(pequeno)
+    # com ~9% de pulsares, garante que o lote tem as duas classes (senão o teste não diz nada)
+    assert y.nunique() == 2
     assert (modelo.predict(X) == y).mean() >= 0.95
 
 
@@ -81,13 +89,27 @@ def test_invariancia_a_ruido_minimo(modelo_atual, xy_holdout):
     assert mudou <= 0.02
 
 
-def test_direcional_tumor_maior_nao_reduz_a_chance_de_maligno(modelo_atual, xy_holdout):
-    """Teste direcional: tumor maior não pode reduzir a probabilidade média de câncer."""
+def test_direcional_perfil_mais_pontudo_nao_reduz_a_chance_de_pulsar(modelo_atual, xy_holdout):
+    """Teste direcional: o pulso de um pulsar é um pico estreito, então o perfil integrado tem
+    curtose alta. Aumentar a curtose do perfil não pode reduzir a probabilidade média de pulsar.
+
+    Somamos (em vez de multiplicar) porque a curtose em excesso pode ser negativa.
+    """
     X_te, _ = xy_holdout
-    coluna = list(modelo_atual.classes_).index(config.CLASSE_MALIGNA)
-    maior = X_te.copy()
-    for c in config.COLUNAS_TAMANHO:
-        maior[c] = maior[c] * 1.10
+    coluna = list(modelo_atual.classes_).index(config.CLASSE_POSITIVA)
+    mais_pontudo = X_te.copy()
+    mais_pontudo["perfil_curtose"] = mais_pontudo["perfil_curtose"] + 0.5
     antes = modelo_atual.predict_proba(X_te)[:, coluna].mean()
-    depois = modelo_atual.predict_proba(maior)[:, coluna].mean()
+    depois = modelo_atual.predict_proba(mais_pontudo)[:, coluna].mean()
     assert depois >= antes
+
+
+def test_invariancia_a_1_porcento_de_ganho_no_receptor(modelo_atual, xy_holdout):
+    """Teste de comportamento: 1% de diferença de ganho no receptor (média e desvio do sinal)
+    é calibração normal e não pode mudar muitas previsões."""
+    X_te, _ = xy_holdout
+    recalibrado = X_te.copy()
+    for c in config.COLUNAS_ESCALA:
+        recalibrado[c] = recalibrado[c] * 1.01
+    mudou = (modelo_atual.predict(X_te) != modelo_atual.predict(recalibrado)).mean()
+    assert mudou <= 0.02
