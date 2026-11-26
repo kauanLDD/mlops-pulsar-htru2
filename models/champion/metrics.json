@@ -1,7 +1,7 @@
 {
-  "recall_pulsar": 0.9239130434782609,
-  "precisao_pulsar": 0.8173076923076923,
-  "acuracia": 0.974,
-  "n_amostras": 1000,
-  "origem": "base_treino.csv"
+  "recall_pulsar": 0.9081632653061225,
+  "precisao_pulsar": 0.8240740740740741,
+  "acuracia": 0.9735849056603774,
+  "n_amostras": 1060,
+  "origem": "treinamento contínuo (CT)"
 }
