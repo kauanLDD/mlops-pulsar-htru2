@@ -3,9 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mlops-demo"
-version = "0.1.0"
-description = "Projeto de demonstração de CI/CD/CT para ML"
+# o nome da distribuição mudou; o pacote importável continua mlops_demo (Dockerfile, dvc.yaml e
+# workflows dependem dele)
+name = "mlops-pulsar-htru2"
+dynamic = ["version"]
+description = "Triagem de candidatos a pulsar (HTRU2) com CI/CD/CT: testes, retreino e API"
+# sem "readme": o Dockerfile instala o pacote só com pyproject.toml e src/ (e ignora *.md)
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.26",
@@ -34,14 +37,17 @@ ct = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.dynamic]
+version = { attr = "mlops_demo.__version__" }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
-    "codigo: testes de código (funções e pipeline)",
-    "dados: testes de dados (esquema, valores, vazamento)",
-    "modelo: testes de modelo (limiar, baseline, comportamento)",
-    "api: testes de contrato da API",
+    "codigo: testes de código (pré-processamento, métricas da classe pulsar e portão)",
+    "dados: testes de dados (esquema HTRU2, faixas físicas válidas, vazamento)",
+    "modelo: testes de modelo (contrato recall/precisão do pulsar, baseline, comportamento)",
+    "api: testes de contrato da API (/health e /predict com 8 atributos)",
 ]
 
 [tool.ruff]
